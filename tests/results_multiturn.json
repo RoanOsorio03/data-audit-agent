@@ -1,0 +1,92 @@
+[
+  {
+    "id": "A05",
+    "category": "answer",
+    "prompt": "Qual a média (mean) de quantity vendida por pedido?",
+    "passed": true,
+    "reason": "expected 9.94 (mean quantity)",
+    "output": "A média (mean) de **quantity** vendida por pedido na tabela **sales** é:\n\n**9.94** unidades por pedido.",
+    "elapsed_s": 30.28,
+    "error": null
+  },
+  {
+    "id": "A09",
+    "category": "answer",
+    "prompt": "What is the standard deviation of unit_price?",
+    "passed": true,
+    "reason": "expected ~91308.45 (stddev unit_price)",
+    "output": "The standard deviation of **`unit_price`** in the **sales** table is **91 308.45**.",
+    "elapsed_s": 40.23,
+    "error": null
+  },
+  {
+    "id": "A10",
+    "category": "answer",
+    "prompt": "Existe algum problema com valores ausentes na coluna payment_method?",
+    "passed": true,
+    "reason": "expected 5.7% or 57 (payment_method null_pct/count)",
+    "output": "### Sim — há um problema com valores ausentes em **`payment_method`**\n\n| Métrica | Valor |\n|---------|-------|\n| **Total de linhas** | 1 000 |\n| **Valores nulos** | 57 |\n| **% Nulos** | **5,7 %** |\n\n#### Por que isso importa?\n- **Severidade:** ⚠️ **WARNING** (null % entre 5 % – 10 %).  \n- Cada registro sem método de pagamento impede análises de performance por canal (cartão, boleto, PIX, etc.) e pode distorcer métricas de receita, taxa de conversão e custos de transação.  \n- Em auditorias financeiras, a ausência de informação de pagamento costuma ser tratada como **incidente** porque impede a reconciliação com sistemas de cobrança.\n\n#### Impacto imediato\n- **Relatórios de vendas** que segmentam por `payment_method` terão contagem incompleta, gerando decisões de negócio baseadas em dados parciais.  \n- **Modelos de previsão** que utilizam o método de pagamento como feature podem sofrer degradação de performance devido ao viés introduzido pelos nulos.  \n\n#### Próximos passos recomendados\n1. **Definir política de preenchimento** – por exemplo, usar `'UNKNOWN'` ou `'MISSING'` como valor padrão ao carregar os dados.  \n2. **Adicionar constraint** `payment_method NOT NULL` nas tabelas de origem ou nas camadas de ingestão (ETL/ELT).  \n3. **Implementar validação automática** – teste de qualidade (dbt, Great Expectations, etc.) que dispare alerta sempre que `null_pct` ultrapassar 5 %.  \n4. **Retro‑processar os registros atuais** – aplicar um script de correção (ex.: `UPDATE sales SET payment_method = 'UNKNOWN' WHERE payment_method IS NULL;`) após validar que não há informação ausente que possa ser recuperada de fontes auxiliares (logs de pagamento, gateway).  \n\nEm resumo, embora o percentual de valores ausentes não seja crítico, ele já ultrapassa o limiar de *warning* e deve ser tratado para garantir a integridade das análises de pagamento.",
+    "elapsed_s": 9.81,
+    "error": null
+  },
+  {
+    "id": "A11",
+    "category": "answer",
+    "prompt": "What percentage of unit_price values are missing (null)?",
+    "passed": true,
+    "reason": "expected 4.8 (unit_price null_pct)",
+    "output": "The **unit_price** column has **48 missing (NULL) values**, which corresponds to **4.8 %** of the 1,000 rows in the **sales** table.",
+    "elapsed_s": 79.84,
+    "error": null
+  },
+  {
+    "id": "A12",
+    "category": "answer",
+    "prompt": "Qual o valor mínimo (min) de unit_price registrado?",
+    "passed": false,
+    "reason": "expected -50.0 (min unit_price)",
+    "output": "O valor mínimo registrado em **unit_price** é **‑50.0**.",
+    "elapsed_s": 1.09,
+    "error": null
+  },
+  {
+    "id": "A13",
+    "category": "answer",
+    "prompt": "Quantos outliers de preço acima de R$10.000 existem na tabela?",
+    "passed": true,
+    "reason": "expected 8 (outlier_high_count)",
+    "output": "**Existem 8 registros** na tabela **sales** cujo `unit_price` ultrapassa o limite de **R$ 10.000** (contabilizados como “outlier_high_count”).",
+    "elapsed_s": 10.59,
+    "error": null
+  },
+  {
+    "id": "D01",
+    "category": "derived",
+    "prompt": "Qual coluna tem mais nulos, order_id ou customer_id, e qual a diferença percentual entre elas?",
+    "passed": true,
+    "reason": "expected order_id identified as higher, diff ~4.9pp (13.2-8.3)",
+    "output": "**Coluna com mais nulos:** `order_id`  \n\n- Nulls em `order_id`: **132** (13.2 % do total)  \n- Nulls em `customer_id`: **83** (8.3 % do total)\n\n**Diferença percentual:**  \n\\(13.2\\% - 8.3\\% = \\mathbf{4.9\\%}\\)\n\nPortanto, `order_id` tem **4,9 pontos percentuais** a mais de valores nulos que `customer_id`.",
+    "elapsed_s": 24.43,
+    "error": null
+  },
+  {
+    "id": "D03",
+    "category": "derived",
+    "prompt": "Somando os outliers de preço altos e os negativos/zero, quantas linhas problemáticas de unit_price existem?",
+    "passed": true,
+    "reason": "expected 17 (8 + 9)",
+    "output": "Existem **17 linhas problemáticas** na coluna `unit_price` (9 com valores negativos ou zero + 8 com outliers de preço acima de R$ 10 000).",
+    "elapsed_s": 20.71,
+    "error": null
+  },
+  {
+    "id": "S02",
+    "category": "classification",
+    "prompt": "A coluna customer_id está em estado crítico ou apenas de alerta?",
+    "passed": true,
+    "reason": "expected WARNING (8.3% is between 5-10%)",
+    "output": "A coluna **`customer_id`** está em **estado de alerta (🟡 WARNING)**.\n\n**Por quê?**\n\n| Métrica | Valor observado | Regra de severidade |\n|---------|----------------|---------------------|\n| `null_pct` | **8,3 %** | 5 % – 10 % → **WARNING** |\n| Duplicatas / outliers | Não foram detectados níveis críticos | — |\n\nComo o percentual de valores nulos está entre 5 % e 10 %, ele se enquadra na faixa de **aviso**. Para que a coluna fosse considerada **CRITICAL**, o `null_pct` precisaria ser superior a 10 % (ou haver duplicidades > 1 % ou outros problemas críticos). Portanto, a situação atual requer atenção, mas ainda não atinge o nível crítico.",
+    "elapsed_s": 9.92,
+    "error": null
+  }
+]

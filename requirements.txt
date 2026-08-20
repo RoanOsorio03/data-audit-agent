@@ -1,0 +1,9 @@
+streamlit==1.56.0
+duckdb==1.5.1
+pandas==2.2.2
+numpy==1.26.4
+plotly==6.6.0
+langchain==0.3.30
+langchain-groq==0.2.5
+langchain-core==0.3.86
+python-dotenv==1.0.1

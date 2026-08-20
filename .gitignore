@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+data/
+reports/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+.streamlit/secrets.toml
+.pytest_cache/
+.ruff_cache/
+.claude/

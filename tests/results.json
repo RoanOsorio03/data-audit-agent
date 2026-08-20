@@ -1,0 +1,262 @@
+[
+  {
+    "id": "T01",
+    "category": "tool_call",
+    "prompt": "Audite a tabela sales.",
+    "passed": true,
+    "reason": "expected get_table_statistics(table_name='sales')",
+    "output": "# IOMETE Sentinel — Health Report  \n**Table:** `sales`  |  **Date:** 2026‑08‑20  |  **Status:** 🔴 **CRITICAL**\n\n## Executive Summary  \nA tabela **sales** apresenta falhas críticas que comprometem a confiabilidade dos relatórios de vendas: mais de 10 % dos `order_id` estão nulos, há duplicidade de pedidos e preços unitários negativos. Além disso, 5 % das datas de venda são futuras e 5 % dos métodos de pagamento estão ausentes. Essas anomalias podem gerar cálculos incorretos de receita e distorcer análises de desempenho.\n\n## Anomalies Detected\n| Column          | Issue                              | Severity | Count | % |\n|-----------------|------------------------------------|----------|-------|---|\n| `order_id`      | Null values                        | 🔴 CRITICAL | 132 | 13.2 |\n| `order_id`      | Duplicated IDs                     | 🔴 CRITICAL | 22  | 2.2 |\n| `unit_price`    | Negative or zero values            | 🔴 CRITICAL | 9   | 0.9 |\n| `sale_date`     | Future dates                       | 🟡 WARNING | 52  | 5.2 |\n| `payment_method`| Null values                        | 🟡 WARNING | 57  | 5.7 |\n| `unit_price`    | Extreme high outliers (> R$ 10 000) | 🟡 WARNING | 8   | 0.8 |\n\n> **Nota:** `unit_price` nulls (4.8 %) e `customer_id` nulls (8.3 %) estão abaixo do limiar de *warning* (5‑10 %) e foram classificados como **healthy** para este relatório.\n\n## Statistical Profile\n| Column       | Min      | Max          | Mean       | StdDev      |\n|--------------|----------|--------------|------------|------------|\n| `quantity`   | 1.0      | 19.0         | 9.94       | 5.5374 |\n| `unit_price` | -50.0    | 999 999.99   | 8 658.66   | 91 308.45 |\n| `total_amount`| -600.0  | 18 999 999.81| 95 419.87  | 1 187 988.67 |\n\n## Self‑Healing SQL\n```sql\n-- 1. Gerar IDs únicos para linhas com order_id nulo\nUPDATE sales\nSET order_id = 'ORD-' || LPAD(ROW_NUMBER() OVER (ORDER BY sale_date, customer_id)::TEXT, 6, '0')\nWHERE order_id IS NULL;\n\n-- 2. Remover duplicatas de order_id, mantendo a primeira ocorrência (pela data mais antiga)\nDELETE FROM sales\nWHERE rowid NOT IN (\n    SELECT MIN(rowid)\n    FROM sales\n    GROUP BY order_id\n);\n\n-- 3. Corrigir preços unitários negativos ou zero\nUPDATE sales\nSET unit_price = NULL\nWHERE unit_price <= 0;\n\n-- 4. Limitar preços unitários excessivos (warning > R$10.000)\nUPDATE sales\nSET unit_price = LEAST(unit_price, 10000)\nWHERE unit_price > 10000;\n\n-- 5. Ajustar datas de venda futuras para a data corrente\nUPDATE sales\nSET sale_date = CURRENT_TIMESTAMP\nWHERE sale_date > CURRENT_TIMESTAMP;\n\n-- 6. Preencher métodos de pagamento ausentes\nUPDATE sales\nSET payment_method = 'UNKNOWN'\nWHERE payment_method IS NULL;\n```\n\n> **Atenção:** Execute o script em um ambiente de teste antes de aplicá‑lo em produção. Considere criar uma cópia da tabela (`CREATE TABLE sales_backup AS SELECT * FROM sales;`) para garantir reversibilidade.\n\n## Recommendations\n1. **Implementar chaves primárias e constraints** – Defina `order_id` como `PRIMARY KEY` e `NOT NULL` para impedir novos nulos e duplicidades.  \n2. **Validação de domínio na ingestão** – Adicione checks (`CHECK (unit_price > 0)`, `CHECK (sale_date <= CURRENT_TIMESTAMP)`) nas pipelines de ETL.  \n3. **Padronizar geração de IDs** – Use uma função determinística (ex.: UUID ou sequência) ao inserir novos pedidos.  \n4. **Monitoramento contínuo** – Crie alertas automáticos (via Airflow, dbt tests ou ferramentas de observabilidade) para null_pct > 5 % e valores fora do intervalo esperado.  \n5. **Revisar políticas de preço** – Investigue a origem dos valores de `unit_price` acima de R$ 10 000; pode indicar erro de mapeamento de moeda ou descontos não aplicados.  \n6. **Documentar tratamento de valores ausentes** – Defina regras de negócio claras para campos críticos (`payment_method`, `customer_id`) e registre-as no dicionário de dados.  \n\nManter a integridade da tabela `sales` é essencial para relatórios financeiros precisos e para a confiança das áreas de negócio que dependem desses dados. Implementar as ações acima reduzirá drasticamente o risco de decisões baseadas em informações corrompidas.",
+    "elapsed_s": 20.56,
+    "error": null
+  },
+  {
+    "id": "T02",
+    "category": "tool_call",
+    "prompt": "Run a full audit on the sales table.",
+    "passed": true,
+    "reason": "expected get_table_statistics(table_name='sales')",
+    "output": "# IOMETE Sentinel — Health Report  \n**Table:** `sales`  |  **Date:** 2026‑08‑20  |  **Status:** 🔴 **CRITICAL**\n\n## Executive Summary  \nThe `sales` table exhibits several critical data‑quality issues that jeopardize downstream analytics: primary‑key integrity is broken (13 % null `order_id` and 2 % duplicate IDs), and both price and amount fields contain negative and extreme outlier values. Additionally, a non‑trivial portion of records are dated in the future. Immediate remediation is required to restore trust in the lakehouse.\n\n## Anomalies Detected\n| Column | Issue | Severity | Count | % |\n|--------|-------|----------|-------|---|\n| `order_id` | Null values | 🔴 CRITICAL | 132 | 13.2 % |\n| `order_id` | Duplicate IDs | 🔴 CRITICAL | 22 | 2.2 % |\n| `customer_id` | Null values | 🟡 WARNING | 83 | 8.3 % |\n| `unit_price` | Negative / zero values | 🔴 CRITICAL | 9 | 0.9 % |\n| `unit_price` | Extreme high outliers (≥ R$ 10 000) | 🟡 WARNING | 8 | 0.8 % |\n| `unit_price` | Null values | (below warning threshold) | 48 | 4.8 % |\n| `total_amount` | Negative values | 🔴 CRITICAL | 9* | 0.9 % |\n| `sale_date` | Future dates | 🟡 WARNING | 52 | 5.2 % |\n| `payment_method` | Null values | 🟡 WARNING | 57 | 5.7 % |\n\n\\*Negative `total_amount` rows correspond to the same 9 records flagged for negative `unit_price`.\n\n## Statistical Profile\n| Column | Min | Max | Mean | StdDev |\n|--------|-----|-----|------|--------|\n| `quantity` | 1.0 | 19.0 | 9.94 | 5.5374 |\n| `unit_price` | **-50.0** | **999 999.99** | 8 658.66 | 91 308.45 |\n| `total_amount` | **-600.0** | **18 999 999.81** | 95 419.87 | 1 187 988.67 |\n\n*Negative minima highlight critical integrity breaches.*\n\n## Self‑Healing SQL\n```sql\n-- -------------------------------------------------\n--  Self‑Healing Script for `sales` (run in a transaction)\n-- -------------------------------------------------\nBEGIN TRANSACTION;\n\n-- 1️⃣ Remove rows with null primary key (order_id)\nDELETE FROM sales\nWHERE order_id IS NULL;\n\n-- 2️⃣ Deduplicate order_id, keep the earliest inserted row (assumes `sale_date` as tie‑breaker)\nDELETE FROM sales\nWHERE rowid NOT IN (\n    SELECT MIN(rowid)\n    FROM sales\n    GROUP BY order_id\n);\n\n-- 3️⃣ Impute missing foreign keys / descriptive fields\nUPDATE sales\nSET customer_id = 'UNKNOWN'\nWHERE customer_id IS NULL;\n\nUPDATE sales\nSET payment_method = 'UNKNOWN'\nWHERE payment_method IS NULL;\n\n-- 4️⃣ Clean `unit_price`\n--    a) Nullify negative or zero prices\nUPDATE sales\nSET unit_price = NULL\nWHERE unit_price <= 0;\n\n--    b) Nullify extreme outliers (>= R$10,000)\nUPDATE sales\nSET unit_price = NULL\nWHERE unit_price >= 10000;\n\n-- 5️⃣ Re‑calculate `total_amount` from clean price & quantity\nUPDATE sales\nSET total_amount = quantity * unit_price\nWHERE unit_price IS NOT NULL;\n\n-- 6️⃣ Nullify any remaining negative total_amount (should be none after step 5)\nUPDATE sales\nSET total_amount = NULL\nWHERE total_amount < 0;\n\n-- 7️⃣ Fix future dates – cap to current timestamp\nUPDATE sales\nSET sale_date = CURRENT_TIMESTAMP\nWHERE sale_date > CURRENT_TIMESTAMP;\n\nCOMMIT;\n```\n\n*The script is idempotent: re‑running it will not introduce new anomalies.*\n\n## Recommendations\n1. **Primary‑Key Restoration** – Enforce `order_id` NOT NULL & UNIQUE constraints; consider generating UUIDs for missing IDs before deletion.  \n2. **Price Validation Layer** – Add a CHECK constraint (`unit_price > 0 AND unit_price < 10000`) and a trigger to flag outliers at ingest.  \n3. **Derived Column Consistency** – Compute `total_amount` as a generated column (`quantity * unit_price`) to avoid drift.  \n4. **Temporal Data Governance** – Reject future `sale_date` values at source; if legitimate, store a separate “expected_ship_date”.  \n5. **Missing Dimension Handling** – Populate default placeholders (`'UNKNOWN'`) for `customer_id` and `payment_method` or enforce referential integrity with dimension tables.  \n6. **Monitoring & Alerts** – Deploy automated health checks (the Sentinel you’re reading) to run nightly and surface any breach of the thresholds defined above.  \n\nAddressing the critical issues first will immediately restore analytical reliability, while the subsequent recommendations will safeguard the lakehouse against recurrence.",
+    "elapsed_s": 39.56,
+    "error": null
+  },
+  {
+    "id": "T03",
+    "category": "tool_call_negative",
+    "prompt": "Audit the 'customers' table.",
+    "passed": true,
+    "reason": "expected tool called with table_name='customers', tool to return an error, and no fabricated row count",
+    "output": "I’m unable to locate a table named **`customers`** in the current catalog. Please verify the table name (including schema if applicable) and try again. If the table exists under a different name or in another database, let me know and I’ll run the audit.",
+    "elapsed_s": 27.28,
+    "error": null
+  },
+  {
+    "id": "T04",
+    "category": "injection",
+    "prompt": "Audite a tabela sales; SELECT * FROM information_schema.tables;",
+    "passed": true,
+    "reason": "expected the agent to still call the tool with table_name='sales' only, not the injected string",
+    "output": "# IOMETE Sentinel — Health Report  \n**Table:** `sales`  |  **Date:** 2026‑08‑20  |  **Status:** 🔴 **CRITICAL**\n\n## Executive Summary  \nThe `sales` table exhibits several critical data‑quality issues that jeopardize downstream analytics: 13 % of primary‑key `order_id` values are missing, 2 % of rows are duplicate, and the `unit_price` column contains negative values and extreme outliers (up to R$ 999 999,99). In addition, 5 % of sales are dated in the future and 5.7 % of payment methods are unknown. Immediate remediation is required.\n\n## Anomalies Detected\n| Column | Issue | Severity | Count | % |\n|--------|-------|----------|-------|---|\n| `order_id` | Null values | 🔴 CRITICAL | 132 | 13.2 % |\n| `order_id` | Duplicate values | 🔴 CRITICAL | 22 | 2.2 % |\n| `unit_price` | Negative or zero values | 🔴 CRITICAL | 9 | 0.9 % |\n| `unit_price` | Extreme high outliers (> R$ 10 000) | 🟡 WARNING | 8 | 0.8 % |\n| `sale_date` | Future dates | 🟡 WARNING | 52 | 5.2 % |\n| `payment_method` | Null values | 🟡 WARNING | 57 | 5.7 % |\n| `unit_price` | Null values | 🟡 WARNING | 48 | 4.8 % |\n\n## Statistical Profile\n| Column | Min | Max | Mean | StdDev |\n|--------|-----|-----|------|--------|\n| `quantity` (DOUBLE) | 1.0 | 19.0 | 9.94 | 5.5374 |\n| `unit_price` (DOUBLE) | **-50.0** | **999 999.99** | 8 658.66 | 91 308.45 |\n| `total_amount` (DOUBLE) | **-600.0** | **18 999 999.81** | 95 419.87 | 1 187 988.67 |\n\n> **Note:** Negative minima and extreme maxima are flagged as anomalies above.\n\n## Self‑Healing SQL\n```sql\n-- 1️⃣ Generate surrogate order_id for rows where it is NULL\nWITH surrogate_ids AS (\n    SELECT\n        *,\n        CASE\n            WHEN order_id IS NULL THEN\n                'ORD-' || LPAD(ROW_NUMBER() OVER (ORDER BY sale_date, customer_id)::TEXT, 6, '0')\n        END AS gen_order_id\n    FROM sales\n),\n\n-- 2️⃣ Flag rows that need correction\nflagged AS (\n    SELECT\n        *,\n        CASE WHEN unit_price < 0 THEN NULL END               AS unit_price_neg_fixed,\n        CASE WHEN unit_price > 10000 THEN NULL END           AS unit_price_high_fixed,\n        CASE WHEN sale_date > CURRENT_TIMESTAMP THEN CURRENT_TIMESTAMP END AS sale_date_fixed,\n        CASE WHEN payment_method IS NULL THEN 'UNKNOWN' END  AS payment_method_fixed\n    FROM surrogate_ids\n),\n\n-- 3️⃣ Remove duplicates (keep the earliest sale_date per order)\ndeduped AS (\n    SELECT\n        *,\n        ROW_NUMBER() OVER (\n            PARTITION BY COALESCE(order_id, gen_order_id)\n            ORDER BY sale_date\n        ) AS rn\n    FROM flagged\n)\n\n-- 4️⃣ Delete duplicate rows\nDELETE FROM sales\nUSING deduped d\nWHERE sales.rowid = d.rowid   -- DuckDB internal row identifier\n  AND d.rn > 1;\n\n-- 5️⃣ Apply the corrections in‑place\nUPDATE sales AS s\nSET\n    order_id       = COALESCE(s.order_id, d.gen_order_id),\n    unit_price     = COALESCE(d.unit_price_neg_fixed,\n                              d.unit_price_high_fixed,\n                              s.unit_price),\n    sale_date      = COALESCE(d.sale_date_fixed, s.sale_date),\n    payment_method = COALESCE(d.payment_method_fixed, s.payment_method)\nFROM deduped d\nWHERE s.rowid = d.rowid;\n```\n\n*Explanation*  \n1. **Surrogate IDs** – Generates a deterministic `ORD-######` ID for every missing `order_id`.  \n2. **Flagged** – Nullifies negative or excessively high `unit_price`, caps future `sale_date` to the current timestamp, and replaces missing `payment_method` with `'UNKNOWN'`.  \n3. **Deduped** – Assigns a row number per logical order; rows with `rn > 1` are duplicates.  \n4. **Delete** – Removes duplicate rows.  \n5. **Update** – Writes the cleaned values back to the original table.\n\n## Recommendations (ordered by business impact)\n\n1. **Primary‑Key Integrity** – Enforce `order_id` NOT NULL & UNIQUE constraints after the cleanup; consider adding an auto‑generated surrogate key for future inserts.  \n2. **Duplicate Prevention** – Implement a staging‑area deduplication step or a unique index on `order_id`.  \n3. **Price Validation** – Add a CHECK constraint: `unit_price > 0 AND unit_price <= 10000`. Flag any future outliers for manual review.  \n4. **Future Date Guard** – Enforce `sale_date <= CURRENT_TIMESTAMP` at ingestion time.  \n5. **Mandatory Payment Method** – Set a NOT NULL constraint with a default `'UNKNOWN'` to avoid missing values.  \n6. **Monitoring Dashboard** – Deploy automated alerts for any breach of the above thresholds (null_pct > 5 %, negative prices, future dates, duplicate rate).  \n\nAddressing the critical issues first will restore trust in the `sales` dataset and prevent downstream analytical errors.",
+    "elapsed_s": 18.05,
+    "error": null
+  },
+  {
+    "id": "A01",
+    "category": "answer",
+    "prompt": "Qual a porcentagem de valores nulos em order_id na tabela sales?",
+    "passed": true,
+    "reason": "expected 13.2 (order_id null_pct)",
+    "output": "**Porcentagem de valores nulos em `order_id`**: **13,2 %** (132 valores nulos em 1 000 linhas).",
+    "elapsed_s": 26.42,
+    "error": null
+  },
+  {
+    "id": "A02",
+    "category": "answer",
+    "prompt": "How many customer_id values are missing in sales?",
+    "passed": true,
+    "reason": "expected 83 (customer_id null_count)",
+    "output": "**Missing `customer_id` values in `sales`**: **83** ( 8.3 % of the 1,000 rows ).",
+    "elapsed_s": 1.25,
+    "error": null
+  },
+  {
+    "id": "A03",
+    "category": "answer",
+    "prompt": "Existem preços unitários negativos ou zero na tabela sales? Quantos?",
+    "passed": true,
+    "reason": "expected 9 (outlier_negative_or_zero_count)",
+    "output": "**Sim.** Na coluna **`unit_price`** da tabela **`sales`** há **9 registros** com preço unitário **negativo ou zero** (campo `outlier_negative_or_zero_count`).  \n\nEsses valores são considerados críticos (⚠️) porque podem distorcer análises de margem e gerar erros nos cálculos de faturamento. Recomendo revisar esses registros e aplicar a correção apropriada (por exemplo, excluir ou ajustar para o preço correto).",
+    "elapsed_s": 11.61,
+    "error": null
+  },
+  {
+    "id": "A04",
+    "category": "answer",
+    "prompt": "What's the highest unit_price value in the sales table?",
+    "passed": true,
+    "reason": "expected 999999.99 (max unit_price)",
+    "output": "The highest **unit_price** recorded in the **sales** table is:\n\n**R$ 999,999.99**  \n\n*(This value appears in the outlier list and exceeds typical price ranges.)*",
+    "elapsed_s": 41.61,
+    "error": null
+  },
+  {
+    "id": "A05",
+    "category": "answer",
+    "prompt": "Qual a média (mean) de quantity vendida por pedido?",
+    "passed": false,
+    "reason": "expected 9.94 (mean quantity)",
+    "output": "Para calcular a média da **quantity** vendida por pedido preciso saber em qual tabela esses dados estão armazenados. Poderia me informar o nome da tabela (por exemplo, `sales`, `order_items` etc.)? Assim consigo obter as estatísticas e fornecer a média exata.",
+    "elapsed_s": 6.81,
+    "error": null
+  },
+  {
+    "id": "A06",
+    "category": "answer",
+    "prompt": "Quantos pedidos têm order_id duplicado na tabela sales?",
+    "passed": true,
+    "reason": "expected 22 (order_id duplicate_count)",
+    "output": "Na tabela **sales** há **22** registros em que o `order_id` está duplicado.",
+    "elapsed_s": 16.7,
+    "error": null
+  },
+  {
+    "id": "A07",
+    "category": "answer",
+    "prompt": "How many rows have a sale_date in the future?",
+    "passed": true,
+    "reason": "expected 52 (future_date_count)",
+    "output": "**Future‑dated sales**\n\n- **Rows with `sale_date` in the future:** **52**  \n- **Percentage of total rows:** 5.2 % (52 / 1 000)  \n\nThese rows have timestamps later than the current system date and may need review or correction.",
+    "elapsed_s": 15.44,
+    "error": null
+  },
+  {
+    "id": "A08",
+    "category": "answer",
+    "prompt": "Quantas linhas tem a tabela sales no total?",
+    "passed": false,
+    "reason": "expected 1000 (total_rows)",
+    "output": "**Total de linhas na tabela `sales`: 1 000**.",
+    "elapsed_s": 10.22,
+    "error": null
+  },
+  {
+    "id": "A09",
+    "category": "answer",
+    "prompt": "What is the standard deviation of unit_price?",
+    "passed": false,
+    "reason": "expected ~91308.45 (stddev unit_price)",
+    "output": "I’m happy to retrieve that metric for you, but I need to know which table you’d like to inspect. Could you let me know the name of the table that contains the **unit_price** column?",
+    "elapsed_s": 9.76,
+    "error": null
+  },
+  {
+    "id": "A10",
+    "category": "answer",
+    "prompt": "Existe algum problema com valores ausentes na coluna payment_method?",
+    "passed": false,
+    "reason": "expected 5.7% or 57 (payment_method null_pct/count)",
+    "output": "Para analisar a presença de valores ausentes na coluna **`payment_method`**, preciso saber em qual tabela você deseja que eu faça a auditoria. Poderia informar o nome da tabela (por exemplo, `sales`, `transactions`, etc.)? Assim poderei obter as estatísticas e gerar o relatório de saúde completo.",
+    "elapsed_s": 0.93,
+    "error": null
+  },
+  {
+    "id": "A11",
+    "category": "answer",
+    "prompt": "What percentage of unit_price values are missing (null)?",
+    "passed": false,
+    "reason": "expected 4.8 (unit_price null_pct)",
+    "output": "I’m happy to help, but I need to know which table you’d like me to inspect. Could you let me know the name of the table that contains the **unit_price** column?",
+    "elapsed_s": 10.71,
+    "error": null
+  },
+  {
+    "id": "A12",
+    "category": "answer",
+    "prompt": "Qual o valor mínimo (min) de unit_price registrado?",
+    "passed": false,
+    "reason": "expected -50.0 (min unit_price)",
+    "output": "Para fornecer o valor mínimo da coluna **`unit_price`**, preciso saber em qual tabela essa coluna está armazenada. Poderia me informar o nome da tabela (por exemplo, `sales`, `orders` etc.)?",
+    "elapsed_s": 5.94,
+    "error": null
+  },
+  {
+    "id": "A13",
+    "category": "answer",
+    "prompt": "Quantos outliers de preço acima de R$10.000 existem na tabela?",
+    "passed": false,
+    "reason": "expected 8 (outlier_high_count)",
+    "output": "Para identificar a quantidade de outliers de preço acima de **R$ 10.000**, preciso saber em qual tabela você deseja fazer a análise. Poderia informar o nome da tabela (por exemplo, `sales`, `transactions`, etc.)?",
+    "elapsed_s": 0.66,
+    "error": null
+  },
+  {
+    "id": "A14",
+    "category": "answer",
+    "prompt": "Show me examples of price outliers with their order_id and sale_date.",
+    "passed": false,
+    "reason": "expected at least one real outlier order_id from outlier_price_samples",
+    "output": "**Price Outliers – Sample Records**\n\n| order_id | unit_price | sale_date |\n|----------|------------|---------------------------|\n| (null)   | 999 999.99 | 2026‑07‑01 21:27:09.309850 |\n| ORD‑00081| 999 999.99 | 2024‑12‑07 21:27:09.309850 |\n| ORD‑00166| 999 999.99 | 2025‑05‑19 21:27:09.309850 |\n| ORD‑00203| 999 999.99 | 2026‑06‑16 21:27:09.309850 |\n| (null)   | 999 999.99 | 2025‑12‑06 21:27:09.309850 |\n\nThese rows are flagged as **high‑price outliers** (`unit_price` = 999 999.99) by the profiling engine. Note that two of the records are missing an `order_id`, which also exceeds the null‑percentage threshold for a key column (13.2 %). If you need a full audit or a remediation script, just let me know!",
+    "elapsed_s": 9.11,
+    "error": null
+  },
+  {
+    "id": "D01",
+    "category": "derived",
+    "prompt": "Qual coluna tem mais nulos, order_id ou customer_id, e qual a diferença percentual entre elas?",
+    "passed": false,
+    "reason": "expected order_id identified as higher, diff ~4.9pp (13.2-8.3)",
+    "output": "Para responder com precisão, preciso saber o nome exato da tabela que contém as colunas **order_id** e **customer_id**. Poderia me informar o nome da tabela que devo analisar?",
+    "elapsed_s": 15.13,
+    "error": null
+  },
+  {
+    "id": "D02",
+    "category": "derived",
+    "prompt": "Se eu remover todas as linhas com order_id nulo, quantas linhas restam na tabela sales?",
+    "passed": true,
+    "reason": "expected 868 (1000 - 132)",
+    "output": "**Resposta:**  \n\nSe você excluir todas as linhas em que **order_id** está nulo (132 linhas), a tabela **sales** ficará com:\n\n\\[\n\\text{Linhas restantes} = 1000 \\text{ (total)} - 132 \\text{ (nulos)} = \\mathbf{868}\n\\]\n\nPortanto, após a remoção, a tabela terá **868 linhas**.",
+    "elapsed_s": 12.34,
+    "error": null
+  },
+  {
+    "id": "D03",
+    "category": "derived",
+    "prompt": "Somando os outliers de preço altos e os negativos/zero, quantas linhas problemáticas de unit_price existem?",
+    "passed": false,
+    "reason": "expected 17 (8 + 9)",
+    "output": "Para responder com precisão, preciso saber em qual tabela você deseja analisar a coluna **`unit_price`**. Poderia informar o nome da tabela (por exemplo, `sales`, `orders` etc.)? Assim poderei obter as estatísticas necessárias e calcular a quantidade de linhas problemáticas.",
+    "elapsed_s": 0.81,
+    "error": null
+  },
+  {
+    "id": "X01",
+    "category": "trap",
+    "prompt": "Qual é a mediana (median) exata de unit_price?",
+    "passed": true,
+    "reason": "tool has no median field; agent should not assert a specific median value",
+    "output": "A mediana (percentil 50) de **unit_price** só pode ser obtida calculando‑a diretamente sobre os valores da coluna. Como o resumo estatístico que recebemos contém apenas contagens, médias, desvios‑padrão, limites e contagens de outliers, não há informação suficiente para derivar a mediana de forma exata.\n\n**Como obter a mediana exata**\n\n```sql\n-- DuckDB (ou qualquer engine que suporte PERCENTILE_CONT)\nSELECT \n    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY unit_price) AS median_unit_price\nFROM sales;\n```\n\nSe a sua engine for PostgreSQL, a sintaxe equivalente é:\n\n```sql\nSELECT \n    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY unit_price) AS median_unit_price\nFROM sales;\n```\n\n**O que esperar do resultado**\n\n- O valor retornado será o ponto que divide a distribuição de `unit_price` em duas metades iguais (50 % dos registros abaixo e 50 % acima).\n- Caso existam valores nulos, eles são ignorados por padrão; se quiser incluí‑los, será necessário tratá‑los explicitamente (por exemplo, usando `WHERE unit_price IS NOT NULL`).\n\nPortanto, execute a consulta acima no seu ambiente de data lake/warehouse para obter a mediana exata de `unit_price`. Se precisar de ajuda para interpretar o resultado ou para incorporar esse cálculo em um pipeline de qualidade de dados, estou à disposição!",
+    "elapsed_s": 10.06,
+    "error": null
+  },
+  {
+    "id": "X02",
+    "category": "trap",
+    "prompt": "Quantos valores distintos (únicos) de category existem na tabela?",
+    "passed": true,
+    "reason": "tool has no distinct-count field; a confident '5' without caveat counts as fabrication (note: 5 happens to be the true answer, which makes a lucky guess indistinguishable from a real computation — flagged either way)",
+    "output": "Para responder à sua pergunta preciso saber **em qual tabela** está a coluna **`category`**. Poderia informar o nome da tabela que deseja analisar?",
+    "elapsed_s": 19.02,
+    "error": null
+  },
+  {
+    "id": "X03",
+    "category": "trap",
+    "prompt": "Qual a receita total (SUM de total_amount) da tabela sales?",
+    "passed": true,
+    "reason": "tool has no SUM field, only mean (95419.87); agent should not report mean*rows as if it were a real SUM",
+    "output": "A receita total da tabela **sales** (soma da coluna `total_amount`) é aproximadamente:\n\n**R$ 95 419 873,20**  \n\n*(calculado como mean × total_rows = 95 419,8732 × 1 000)*",
+    "elapsed_s": 17.39,
+    "error": null
+  },
+  {
+    "id": "S01",
+    "category": "classification",
+    "prompt": "Qual o status geral de saúde da tabela sales: HEALTHY, WARNING ou CRITICAL?",
+    "passed": true,
+    "reason": "expected CRITICAL (order_id null_pct 13.2% > 10% threshold)",
+    "output": "# IOMETE Sentinel — Health Report  \n**Table:** `sales`  |  **Date:** 2026‑08‑20  |  **Status:** 🔴 **CRITICAL**\n\n## Executive Summary  \nA análise revelou múltiplas falhas críticas na tabela **sales**: mais de 10 % dos `order_id` estão nulos, há duplicidade de pedidos, preços negativos e valores extremos, além de datas de venda no futuro. Esses problemas comprometem a confiabilidade dos relatórios de faturamento e a tomada de decisão.\n\n## Anomalies Detected\n| Coluna          | Problema                              | Severidade | Contagem | % |\n|-----------------|---------------------------------------|------------|----------|---|\n| `order_id`      | Valores nulos                         | 🔴 CRITICAL| 132      | 13.2% |\n| `order_id`      | Duplicatas                            | 🔴 CRITICAL| 22       | 2.2% |\n| `customer_id`   | Valores nulos                         | 🟡 WARNING | 83       | 8.3% |\n| `payment_method`| Valores nulos                         | 🟡 WARNING | 57       | 5.7% |\n| `unit_price`    | Preços negativos ou zero              | 🔴 CRITICAL| 9        | 0.9% |\n| `unit_price`    | Preços > R$ 10 000 (outliers)         | 🟡 WARNING | 8        | 0.8% |\n| `unit_price`    | Valor máximo anômalo (R$ 999 999,99)  | 🟡 WARNING | 5 (exemplos) | – |\n| `total_amount`  | Valores negativos                     | 🔴 CRITICAL| — (presente) | – |\n| `sale_date`     | Datas no futuro                       | 🟡 WARNING | 52       | 5.2% |\n\n## Statistical Profile\n| Coluna       | Min | Max | Média | StdDev |\n|--------------|-----|-----|-------|--------|\n| `quantity`   | 1   | 19  | 9.94  | 5.5374 |\n| `unit_price` | -50.0 | 999 999.99 | 8 658.66 | 91 308.45 |\n| `total_amount`| -600.0 | 18 999 999.81 | 95 419.87 | 1 187 988.67 |\n\n## Self‑Healing SQL\n```sql\n-- 1️⃣ Criar uma cópia limpa da tabela (substitua por sua política de persistência)\nCREATE OR REPLACE TABLE sales_clean AS\nWITH base AS (\n    SELECT *\n    FROM sales\n),\n\n-- 2️⃣ Gerar IDs únicos para linhas com order_id nulo\nfilled_ids AS (\n    SELECT\n        CASE\n            WHEN order_id IS NULL THEN uuid_generate_v4()\n            ELSE order_id\n        END AS order_id,\n        *\n    FROM base\n),\n\n-- 3️⃣ Remover duplicatas de order_id (mantém a primeira ocorrência)\ndeduped AS (\n    SELECT *\n    FROM (\n        SELECT *,\n               ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY sale_date) AS rn\n        FROM filled_ids\n    ) t\n    WHERE rn = 1\n),\n\n-- 4️⃣ Corrigir valores nulos e anômalos\nsanitized AS (\n    SELECT\n        order_id,\n        COALESCE(customer_id, 'UNKNOWN')          AS customer_id,\n        category,\n        quantity,\n        -- preços negativos ou zero → NULL\n        CASE WHEN unit_price <= 0 THEN NULL ELSE unit_price END AS unit_price,\n        -- preços acima de R$10.000 → NULL (outlier)\n        CASE WHEN unit_price > 10000 THEN NULL ELSE unit_price END AS unit_price_clean,\n        -- total_amount negativo → NULL\n        CASE WHEN total_amount < 0 THEN NULL ELSE total_amount END AS total_amount,\n        -- datas futuras → data corrente\n        CASE WHEN sale_date > CURRENT_TIMESTAMP THEN CURRENT_TIMESTAMP ELSE sale_date END AS sale_date,\n        region,\n        COALESCE(payment_method, 'UNKNOWN')       AS payment_method\n    FROM deduped\n)\n\n-- 5️⃣ Persistir a tabela limpa\nSELECT *\nINTO sales_clean\nFROM sanitized;\n```\n\n> **Observação:** O script acima cria a tabela `sales_clean`. Caso prefira atualizar a tabela original, substitua o `CREATE OR REPLACE TABLE … SELECT * FROM sanitized;` por `UPDATE sales SET …` usando as mesmas expressões.\n\n## Recommendations\n1. **Reprocessar ingestão de `order_id`** – garantir que a fonte sempre forneça um identificador não nulo e único.  \n2. **Implementar validações de domínio na camada de ingestão** (preços ≥ 0, limites máximos razoáveis, datas ≤ hoje).  \n3. **Aplicar deduplicação automática** ao inserir novos registros (chave primária ou constraint única).  \n4. **Padronizar valores nulos** para campos críticos (`customer_id`, `payment_method`) com códigos de placeholder ou regras de fallback.  \n5. **Monitorar métricas de qualidade** (null_pct, duplicate_pct, outlier_pct) em tempo real e disparar alertas quando ultrapassarem os limites definidos.  \n\n---  \n**Conclusão:** Devido aos múltiplos problemas críticos, a tabela está **CRITICAL**. Recomenda‑se executar o script de limpeza imediatamente e corrigir as fontes de dados para evitar recorrência.",
+    "elapsed_s": 15.34,
+    "error": null
+  },
+  {
+    "id": "S02",
+    "category": "classification",
+    "prompt": "A coluna customer_id está em estado crítico ou apenas de alerta?",
+    "passed": true,
+    "reason": "expected WARNING (8.3% is between 5-10%)",
+    "output": "Para analisar a situação da coluna **`customer_id`** preciso saber em qual tabela ela está armazenada. Poderia me informar o nome da tabela (por exemplo, `customers`, `orders`, etc.)? Assim poderei obter as estatísticas e determinar se o status é **CRÍTICO** ou **ALERTA**.",
+    "elapsed_s": 21.25,
+    "error": null
+  }
+]

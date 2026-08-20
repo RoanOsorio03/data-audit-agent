@@ -1,0 +1,49 @@
+name: LLM eval
+
+# Deliberately NOT run on every push/PR: these tests make real calls to the
+# Groq API, which costs credits, takes several minutes, depends on an
+# external service being up, and needs GROQ_API_KEY as a repo secret — a
+# secret that GitHub does not expose to pull requests from forks. Keeping
+# this separate from ci.yml means the main badge stays fast, free, and
+# green/red only on things this repo actually controls. See README > CI.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+
+jobs:
+  agent-accuracy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Generate lakehouse data
+        run: python src/setup_data.py
+
+      - name: Run 26-case cold-start suite
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python tests/test_agent_accuracy.py
+
+      - name: Run 9-case multi-turn follow-up suite
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python tests/test_agent_accuracy_multiturn.py
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-eval-results
+          path: |
+            tests/results.json
+            tests/results_multiturn.json
+          retention-days: 90
